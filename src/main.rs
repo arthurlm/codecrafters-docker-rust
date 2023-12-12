@@ -67,6 +67,14 @@ impl Container {
     }
 
     fn exec(&self) -> anyhow::Result<ExitStatus> {
+        // Isolate PID namespace
+        // NOTE: Need to be called on parent process.
+        assert_eq!(
+            unsafe { libc::unshare(libc::CLONE_NEWPID) },
+            0,
+            "unshare fail"
+        );
+
         // Pipe file descriptor and clean env.
         let mut ps = Command::new(&self.command);
         ps.args(&self.args)
@@ -75,12 +83,12 @@ impl Container {
             .stderr(Stdio::inherit())
             .env_clear();
 
-        // Isolate process before spawning it.
         let chroot_path = self.chroot_dir.path().to_path_buf();
         assert!(chroot_path.exists());
 
         unsafe {
             ps.pre_exec(move || {
+                // Isolate process before spawning it.
                 unix::fs::chroot(&chroot_path)?;
                 env::set_current_dir("/")?;
                 Ok(())
