@@ -70,7 +70,16 @@ impl Container {
         // Isolate PID namespace
         // NOTE: Need to be called on parent process.
         assert_eq!(
-            unsafe { libc::unshare(libc::CLONE_NEWPID) },
+            unsafe {
+                libc::unshare(
+                    libc::CLONE_NEWCGROUP
+                        | libc::CLONE_NEWIPC
+                        | libc::CLONE_NEWNS
+                        | libc::CLONE_NEWPID
+                        | libc::CLONE_NEWUSER
+                        | libc::CLONE_NEWUTS,
+                )
+            },
             0,
             "unshare fail"
         );
