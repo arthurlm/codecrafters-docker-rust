@@ -6,8 +6,7 @@ use serde::Deserialize;
 
 use crate::ContainerError;
 
-const MIME_OCI_IMAGE_INDEX: &str = "application/vnd.oci.image.index.v1+json";
-const MIME_OCI_IMAGE_MANIFEST: &str = "application/vnd.oci.image.manifest.v1+json";
+const MIME_OCI_IMAGE_INDEX: &str = "application/vnd.docker.distribution.manifest.list.v2+json";
 
 #[derive(Debug)]
 pub struct RegistryClient {
@@ -46,11 +45,8 @@ impl RegistryClient {
 
     pub async fn list_manifests(&self) -> Result<Vec<Manifest>, ContainerError> {
         #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
         pub struct ManifestList {
             manifests: Vec<Manifest>,
-            #[serde(flatten)]
-            object_type: ObjectType,
         }
 
         let url = self
@@ -61,6 +57,7 @@ impl RegistryClient {
         let res: ManifestList = self
             .client
             .get(url)
+            .header("Accept", MIME_OCI_IMAGE_INDEX)
             .bearer_auth(self.token.as_deref().unwrap_or_default())
             .send()
             .await?
@@ -68,7 +65,6 @@ impl RegistryClient {
             .json()
             .await?;
 
-        res.object_type.validate(MIME_OCI_IMAGE_INDEX)?;
         Ok(res.manifests)
     }
 
@@ -92,7 +88,7 @@ impl RegistryClient {
             .json()
             .await?;
 
-        res.object_type.validate(MIME_OCI_IMAGE_MANIFEST)?;
+        res.object_type.validate(&manifest.content.media_type)?;
         Ok(res)
     }
 

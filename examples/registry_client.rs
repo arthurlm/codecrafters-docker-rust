@@ -4,7 +4,7 @@ use docker_starter_rust::{fs_utils, registry::RegistryClient};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let client =
-        RegistryClient::authenticated("https://registry.hub.docker.com", "ubuntu", "latest")
+        RegistryClient::authenticated("https://registry.hub.docker.com", "alpine", "latest")
             .await?;
 
     let manifests = client.list_manifests().await?;
