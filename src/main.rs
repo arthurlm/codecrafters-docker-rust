@@ -1,49 +1,81 @@
 use std::{
     env, fs,
     os::unix::{self, process::CommandExt},
-    path::{Path, PathBuf},
     process::{exit, Command, ExitStatus, Stdio},
 };
 
 use anyhow::Context;
+use docker_starter_rust::{fs_utils, registry::RegistryClient};
 use tempfile::{tempdir, TempDir};
 
 // Usage: your_docker.sh run <image> <command> <arg1> <arg2> ...
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let container = Container::new(cli)?;
+    let container = Container::new(cli).await?;
     let status = container.exec()?;
     exit(status.code().unwrap_or(1));
 }
 
 #[derive(Debug)]
 struct Cli {
+    image: String,
+    tag: String,
     command: String,
     args: Vec<String>,
 }
 
 impl Cli {
     fn parse() -> Self {
-        let args: Vec<_> = env::args().collect();
+        let full_image = env::args().nth(2).expect("Missing image args");
+
+        let full_image_items: Vec<_> = full_image.rsplitn(2, ':').collect();
+        let (image, tag) = match &full_image_items[..] {
+            [tag, image] => (image.to_string(), tag.to_string()),
+            [image] => (image.to_string(), "latest".to_string()),
+            _ => panic!("Fail to parse image name"),
+        };
+
+        let command = env::args().nth(3).expect("Missing command args");
+        let args = env::args().skip(4).collect();
+
         Self {
-            command: args[3].clone(),
-            args: args[4..].to_vec(),
+            image,
+            tag,
+            command,
+            args,
         }
     }
 }
 
 #[derive(Debug)]
 struct Container {
-    command: PathBuf,
+    command: String,
     args: Vec<String>,
     chroot_dir: TempDir,
 }
 
 impl Container {
-    fn new(cli: Cli) -> anyhow::Result<Self> {
+    async fn new(cli: Cli) -> anyhow::Result<Self> {
+        let registry_client =
+            RegistryClient::authenticated("https://registry.hub.docker.com", &cli.image, &cli.tag)
+                .await?;
+
+        // Download layer from docker hub
+        let manifests = registry_client.list_manifests().await?;
+        let target_manifest = manifests
+            .into_iter()
+            .find(|m| m.platform.architecture == "amd64" && m.platform.os == "linux")
+            .with_context(|| "No platform found")?;
+
+        let image_manifest = registry_client
+            .read_image_manifest(&target_manifest)
+            .await?;
+        let layer = registry_client.read_blob(&image_manifest.layers[0]).await?;
+
         // Prepare chroot.
         let chroot_dir =
-            tempdir().with_context(|| format!("Cannot create temporary chroot dir"))?;
+            tempdir().with_context(|| "Cannot create temporary chroot dir".to_string())?;
 
         let chroot_path = chroot_dir.path();
 
@@ -51,16 +83,11 @@ impl Container {
         fs::create_dir_all(chroot_path.join("dev"))?;
         fs::write(chroot_path.join("dev/null"), "")?;
 
-        // Copy program to chroot
-        let program_basename = Path::new(&cli.command)
-            .file_name()
-            .with_context(|| format!("Missing program basename"))?;
-
-        fs::copy(&cli.command, chroot_path.join(program_basename))
-            .with_context(|| "Cannot copy bin to chroot dir")?;
+        // Uncompressed layer to chroot
+        fs_utils::decompress_layer(layer, chroot_path)?;
 
         Ok(Self {
-            command: PathBuf::from("/").join(program_basename),
+            command: cli.command,
             args: cli.args,
             chroot_dir,
         })
@@ -76,7 +103,7 @@ impl Container {
                         | libc::CLONE_NEWIPC
                         | libc::CLONE_NEWNS
                         | libc::CLONE_NEWPID
-                        | libc::CLONE_NEWUSER
+                        // | libc::CLONE_NEWUSER
                         | libc::CLONE_NEWUTS,
                 )
             },

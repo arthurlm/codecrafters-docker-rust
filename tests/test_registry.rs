@@ -7,7 +7,9 @@ const URL: &str = "https://registry.hub.docker.com";
 
 #[tokio::test]
 async fn test_auth() {
-    assert!(RegistryClient::auth(URL, "ubuntu", "latest").await.is_ok());
+    assert!(RegistryClient::authenticated(URL, "ubuntu", "latest")
+        .await
+        .is_ok());
 }
 
 #[test]

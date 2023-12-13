@@ -18,7 +18,7 @@ pub struct RegistryClient {
 }
 
 impl RegistryClient {
-    pub async fn auth<U: IntoUrl>(
+    pub async fn authenticated<U: IntoUrl>(
         url: U,
         image_name: &str,
         tag: &str,
@@ -238,13 +238,13 @@ pub fn parse_www_authenticate(header: &str) -> Result<String, ContainerError> {
 
     for (id, (param_name, param_value)) in params.into_iter().enumerate() {
         if id == 0 {
-            output.push_str("?");
+            output.push('?');
         } else {
-            output.push_str("&");
+            output.push('&');
         }
 
         output.push_str(param_name);
-        output.push_str("=");
+        output.push('=');
         output.push_str(param_value);
     }
 
