@@ -96,7 +96,10 @@ impl RegistryClient {
         Ok(res)
     }
 
-    pub async fn read_blob(&self, element: &ManifestElement) -> Result<Bytes, ContainerError> {
+    pub async fn read_blob(
+        &self,
+        element: &ManifestElement,
+    ) -> Result<ImageLayerData, ContainerError> {
         let url = self
             .api_url
             .join(&format!("blobs/{}", element.digest))
@@ -113,7 +116,7 @@ impl RegistryClient {
             .bytes()
             .await?;
 
-        Ok(res)
+        Ok(ImageLayerData(res))
     }
 }
 
@@ -167,6 +170,9 @@ pub struct ManifestElement {
     pub size: usize,
     pub digest: String,
 }
+
+#[derive(Debug)]
+pub struct ImageLayerData(pub Bytes);
 
 async fn query_auth_token(url: Url) -> Result<Option<String>, ContainerError> {
     #[derive(Deserialize)]

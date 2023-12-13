@@ -1,6 +1,5 @@
 use anyhow::Context;
-use docker_starter_rust::registry::RegistryClient;
-use tokio::fs;
+use docker_starter_rust::{fs_utils, registry::RegistryClient};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -14,9 +13,9 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| "No platform found")?;
 
     let image_manifest = client.read_image_manifest(&target_manifest).await?;
-    let blob = client.read_blob(&image_manifest.layers[0]).await?;
+    let layer = client.read_blob(&image_manifest.layers[0]).await?;
 
-    fs::write("data.tar.gz", &blob).await?;
+    fs_utils::decompress_layer(layer, "/tmp/image-decompress")?;
 
     Ok(())
 }

@@ -1,3 +1,5 @@
+use std::io;
+
 use reqwest::StatusCode;
 use thiserror::Error;
 
@@ -14,10 +16,19 @@ pub enum ContainerError {
 
     #[error("Unsupported manifest file: {0}")]
     Manifest(&'static str),
+
+    #[error("I/O error: {0}")]
+    Io(String),
 }
 
 impl From<reqwest::Error> for ContainerError {
     fn from(err: reqwest::Error) -> Self {
         Self::Http(err.to_string())
+    }
+}
+
+impl From<io::Error> for ContainerError {
+    fn from(err: io::Error) -> Self {
+        Self::Io(err.to_string())
     }
 }
